@@ -110,6 +110,7 @@ fn get_open_workspaces() -> Vec<(String, bool, String)> {
 
 fn get_corresponding_workspaces(screen_name: &str) -> Vec<&str> {
     match screen_name {
+        "eDP-1" => vec!["1", "2", "3", "4"], // Laptop
         "HDMI-A-1" => vec!["1", "2", "3", "4"],
         "DP-1" => vec!["11", "12", "13", "14"],
         "DP-3" => vec!["21", "22", "23", "24"],
