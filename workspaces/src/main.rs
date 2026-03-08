@@ -61,7 +61,7 @@ fn format_as_icon(repr: &str, visible: bool) -> String {
         .collect::<Vec<_>>()
         .join(" ");
 
-    format!("❬ {}❭", formatted)
+    format!("❬ {}❭", formatted)
 }
 
 fn get_open_workspaces() -> Vec<(String, bool, String)> {
