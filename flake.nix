@@ -23,6 +23,17 @@
           strictDeps = true;
         };
 
+        diagnostics = craneLib.buildPackage {
+          src = craneLib.cleanCargoSource ./diagnostics;
+          strictDeps = true;
+
+          buildInputs = with pkgs; [
+            curl
+            upower
+
+          ];
+        };
+
         resources = craneLib.buildPackage {
           src = craneLib.cleanCargoSource ./resources;
           strictDeps = true;
@@ -50,6 +61,7 @@
         packages = {
           inherit workspaces;
           inherit resources;
+          inherit diagnostics;
 
           default = workspaces; # or combine them somehow
         };
@@ -62,6 +74,10 @@
           resources = {
             type = "app";
             program = "${resources}/bin/resources";
+          };
+          diagnostics = {
+            type = "app";
+            program = "${diagnostics}/bin/diagnostics";
           };
         };
       }

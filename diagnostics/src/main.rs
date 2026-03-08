@@ -1,5 +1,6 @@
 use std::env;
 use std::io::{self, Write};
+use std::process::{Command, Stdio};
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -9,15 +10,50 @@ enum HostType {
 }
 
 fn bluetooth_check_battery_low(mac: &str) -> bool {
-    // upower -dump
-    // Split on "Device"
-    // Match mac to device
-    // If not found/connected, return false (ignore unconnected)
-    // Get "percentage"
-    // extract value
-    // Convert to int
-    // Return val < 20
-    true
+    let upower = Command::new("upower")
+        .args(["-d"])
+        .stdout(Stdio::piped())
+        .spawn();
+
+    let Ok(mut upower) = upower else {
+        return false; // If upower fails, assume no warning needed
+    };
+
+    let stdout = upower
+        .stdout
+        .take()
+        .expect("Failed to get stdout from upower");
+
+    // Search for the MAC address and extract percentage
+    let grep = Command::new("grep")
+        .args(["-A", "20", mac])
+        .stdin(Stdio::from(stdout))
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("Failed to spawn grep");
+
+    let _ = upower.wait().expect("Failed to wait for upower");
+
+    let grep_out = grep.wait_with_output().expect("Failed to get grep output");
+    let output = String::from_utf8_lossy(&grep_out.stdout);
+
+    // Parse percentage line
+    for line in output.lines() {
+        if !line.contains("percentage:") {
+            continue;
+        }
+
+        let Some(pct_str) = line.split_whitespace().nth(1) else {
+            continue;
+        };
+        let Ok(pct) = pct_str.trim_end_matches('%').parse::<i32>() else {
+            continue;
+        };
+
+        return pct < 20;
+    }
+
+    false // Device not found or not connected
 }
 
 // TODO: Special spaces like in resources
@@ -44,13 +80,81 @@ fn diag_desktop() -> Vec<String> {
 }
 
 fn check_any_disk_full() -> bool {
-    // df -h --output=source,pcent,target | grep '^/' | grep -v '/boot' | awk 'int($2) > 80' | grep -q .
-    true
+    let pct_threshold = 80;
+
+    let mut df = Command::new("df")
+        .args(["-h", "--output=source,pcent,target"])
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("Failed to spawn df");
+
+    let stdout = df.stdout.take().expect("Failed to get df stdout");
+
+    let mut grep1 = Command::new("grep")
+        .args(["^/"])
+        .stdin(Stdio::from(stdout))
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("Failed to spawn grep");
+
+    let _ = df.wait().expect("Failed to wait for df");
+
+    let grep1_out = grep1.stdout.take().expect("Failed to get grep1 stdout");
+
+    let grep2 = Command::new("grep")
+        .args(["-v", "/boot"])
+        .stdin(Stdio::from(grep1_out))
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("Failed to spawn grep2");
+
+    let _ = grep1.wait().expect("Failed to wait for grep1");
+
+    let grep2_out = grep2
+        .wait_with_output()
+        .expect("Failed to get grep2 output");
+    let output = String::from_utf8_lossy(&grep2_out.stdout);
+
+    // Parse percentage from each line
+    for line in output.lines() {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 2 {
+            continue;
+        }
+
+        let Ok(pct) = parts[1].trim_end_matches('%').parse::<i32>() else {
+            continue;
+        };
+
+        if pct > pct_threshold {
+            return true;
+        }
+    }
+
+    false
 }
 
 fn check_homelab_ping() -> bool {
-    true
-    // curl -s -o /dev/null -w "%{http_code}" https://rvdlserver.nl/}
+    let curl = Command::new("curl")
+        .args([
+            "-s",
+            "-o",
+            "/dev/null",
+            "-w",
+            "%{http_code}",
+            "https://rvdlserver.nl/",
+        ])
+        .stdout(Stdio::piped())
+        .spawn();
+
+    let Ok(curl) = curl else {
+        return false; // Network issues, assume down
+    };
+
+    let output = curl.wait_with_output().expect("Failed to get curl output");
+    let status_code = String::from_utf8_lossy(&output.stdout);
+
+    status_code.trim() == "200"
 }
 
 fn diag_laptop() -> Vec<String> {
@@ -93,7 +197,7 @@ fn main() {
     assert_eq!(
         args.len(),
         2,
-        "Wrong number of args (expected 2, got {}), 'resources <device>'",
+        "Wrong number of args (expected 2, got {}), 'diagnostics <device>'",
         args.len()
     );
 
