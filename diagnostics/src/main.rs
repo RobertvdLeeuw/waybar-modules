@@ -174,8 +174,6 @@ fn check_homelab_ping() -> bool {
 fn diag_laptop() -> Vec<String> {
     let mut warnings = Vec::new();
 
-    // Laptop battery < 20%
-
     warnings
 }
 

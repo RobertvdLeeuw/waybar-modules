@@ -86,8 +86,9 @@ fn get_cpu_info(sys: &mut System) -> (i32, i32, i32) {
 
     (
         cpu_use as i32,
+        // "with_entries(select(.key | contains(\"kraken\"))) | .[] | .Coolant.temp1_input",
         get_device_temp(
-            "with_entries(select(.key | contains(\"kraken\"))) | .[] | .Coolant.temp1_input",
+            "with_entries(select(.key | contains(\"k10temp\"))) | .[] | .Tctl.temp1_input",
         ),
         (100 * sys.used_memory() as i64 / sys.total_memory() as i64) as i32,
     )
