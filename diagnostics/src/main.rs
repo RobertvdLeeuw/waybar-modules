@@ -134,6 +134,20 @@ fn check_any_disk_full() -> bool {
     false
 }
 
+fn check_internet_connection() -> bool {
+    let ping = Command::new("ping")
+        .args(["-c", "1", "-W", "3", "google.com"])
+        .stdout(Stdio::piped())
+        .spawn();
+
+    let Ok(ping) = ping else {
+        return false; // Network issues, assume down
+    };
+
+    let output = ping.wait_with_output().expect("Failed to get ping output");
+    output.status.success()
+}
+
 fn check_homelab_ping() -> bool {
     let curl = Command::new("curl")
         .args([
@@ -170,10 +184,12 @@ fn diag_common() -> Vec<String> {
     let mut warnings = Vec::new();
 
     if check_any_disk_full() {
-        warnings.push("󰇑 ".to_string());
+        warnings.push(" ".to_string());
     }
     // Homelab unresponsive to ping
-    if !check_homelab_ping() {
+    if !check_internet_connection() {
+        warnings.push("󰖩 ".to_string());
+    } else if !check_homelab_ping() {
         warnings.push("󰧠 ".to_string());
     }
 
