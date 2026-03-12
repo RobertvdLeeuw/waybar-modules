@@ -30,7 +30,7 @@
           buildInputs = with pkgs; [
             curl
             upower
-
+            yt-dlp
           ];
         };
 
