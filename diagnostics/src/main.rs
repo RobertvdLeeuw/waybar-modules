@@ -56,6 +56,27 @@ fn bluetooth_check_battery_low(mac: &str) -> bool {
     false // Device not found or not connected
 }
 
+fn check_lekkerspelen_live() -> bool {
+    let yt_dlp = Command::new("yt-dlp")
+        .args([
+            "--print",
+            "%(is_live)s",
+            "https://www.youtube.com/@lekkerspelen/live",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn();
+
+    let Ok(yt_dlp) = yt_dlp else {
+        return false;
+    };
+
+    let output = yt_dlp
+        .wait_with_output()
+        .expect("Failed to get yt-dlp output");
+    output.status.success()
+}
+
 // TODO: Special spaces like in resources
 
 fn diag_desktop() -> Vec<String> {
@@ -189,6 +210,10 @@ fn diag_common() -> Vec<String> {
         warnings.push("󰖩 ".to_string());
     } else if !check_homelab_ping() {
         warnings.push("󰧠 ".to_string());
+    }
+
+    if check_lekkerspelen_live() {
+        warnings.push("󱈔 ".to_string());
     }
 
     warnings
