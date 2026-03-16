@@ -209,7 +209,7 @@ fn diag_common() -> Vec<String> {
     if !check_internet_connection() {
         warnings.push("󰖩 ".to_string());
     } else if !check_homelab_ping() {
-        warnings.push("󰧠 ".to_string());
+        // warnings.push("󰧠 ".to_string());
     }
 
     if check_lekkerspelen_live() {
