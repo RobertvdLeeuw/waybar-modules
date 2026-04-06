@@ -49,6 +49,7 @@ fn format_as_icon(repr: &str, visible: bool) -> String {
                 "libreoffice-calc" => "󰧷 ",
                 "steam" => " ",
                 "wasistlos" => " ",
+                "chimp" => " ",
                 _ if app.contains("steam_app") => "󰊗 ", // TODO: This only works for a handful of games.
                 // TEST NAMES FROM BELOW
                 "teams" => "󰊻 ",
