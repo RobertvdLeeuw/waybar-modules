@@ -132,6 +132,6 @@ fn main() {
         writeln!(handle, "{}", format_info(&device_type, usage, temp, mem)).unwrap();
 
         let _ = handle.flush();
-        sleep(Duration::from_millis(500));
+        sleep(Duration::from_millis(750));
     }
 }
