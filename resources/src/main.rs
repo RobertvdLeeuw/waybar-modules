@@ -1,9 +1,10 @@
 use std::env;
+use std::fs;
 use std::io::{self, Write};
-use std::process::{Child, Command, Stdio};
 use std::thread::sleep;
 use std::time::Duration;
 
+use sensors::Sensors;
 use sysinfo::System;
 
 enum Device {
@@ -11,7 +12,7 @@ enum Device {
     GPU,
 }
 
-fn format_info(device_type: &Device, usage: i32, temp: i32, mem: i32) -> String {
+fn format_info(device_type: &Device, usage: u8, temp: u8, mem: u8) -> String {
     let icon = match device_type {
         Device::CPU => "",
         Device::GPU => "󰢮",
@@ -36,45 +37,26 @@ fn format_info(device_type: &Device, usage: i32, temp: i32, mem: i32) -> String 
     )
 }
 
-fn jq_select(mut process: Child, jq_path: &str) -> String {
-    let stdout = process
-        .stdout
-        .take()
-        .expect("Failed to get stdout from prev.");
-
-    let jq_child = Command::new("jq")
-        .args([jq_path])
-        .stdin(Stdio::from(stdout))
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("Failed to spawn jq command.");
-
-    let _ = process.wait().expect("Failed to wait for prev.");
-
-    let result = String::from_utf8(
-        jq_child
-            .wait_with_output()
-            .expect("Failed to get jq output")
-            .stdout,
-    )
-    .expect("Failed to cast stdout to string.");
-
-    String::from(result.trim())
+fn get_device_temp(chip: &str, feature: &str, subfeature: &str) -> u8 {
+    Sensors::new()
+        .into_iter()
+        .find(|c| {
+            c.get_name()
+                .expect("Unable to get sensor name")
+                .starts_with(chip)
+        })
+        .unwrap_or_else(|| panic!("Unable to find device: '{}'", chip))
+        .into_iter()
+        .find(|f| f.get_label().expect("Unable to get feature name") == feature)
+        .unwrap_or_else(|| panic!("Unable to find device feature: '{}'", feature))
+        .into_iter()
+        .find(|sf| sf.name() == subfeature)
+        .unwrap_or_else(|| panic!("Unable to find device subfeature: '{}'", subfeature))
+        .get_value()
+        .expect("Unable to retrieve device temperature value.") as u8
 }
 
-fn get_device_temp(jq_path: &str) -> i32 {
-    let temp = Command::new("sensors")
-        .args(["-j"])
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("Failed to spawn lm_sensors command.");
-
-    jq_select(temp, jq_path)
-        .parse::<f32>()
-        .expect("Failed parsing device temp to float.") as i32
-}
-
-fn get_cpu_info(sys: &mut System) -> (i32, i32, i32) {
+fn get_cpu_info(sys: &mut System) -> (u8, u8, u8) {
     sys.refresh_cpu_usage();
     sys.refresh_memory();
 
@@ -85,40 +67,38 @@ fn get_cpu_info(sys: &mut System) -> (i32, i32, i32) {
         / sys.cpus().len() as f32;
 
     (
-        cpu_use as i32,
-        // "with_entries(select(.key | contains(\"kraken\"))) | .[] | .Coolant.temp1_input",
-        get_device_temp(
-            "with_entries(select(.key | contains(\"k10temp\"))) | .[] | .Tctl.temp1_input",
-        ),
-        (100 * sys.used_memory() as i64 / sys.total_memory() as i64) as i32,
+        cpu_use as u8,
+        get_device_temp("k10temp", "Tctl", "temp1_input"),
+        (100 * sys.used_memory() / sys.total_memory()) as u8,
     )
 }
 
-fn get_gpu_info() -> (i32, i32, i32) {
-    let rocm = Command::new("rocm-smi")
-        .args(["--showuse", "--showmemuse", "--json"])
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("Failed to spawn rocm-smi command.");
-    let info = jq_select(
-        rocm,
-        ".\"card0\"| .\"GPU use (%)\", .\"GPU Memory Allocated (VRAM%)\"",
-    )
-    .split("\n")
-    .map(|x| {
-        x.trim()
-            .replace("\"", "")
-            .parse::<i32>()
-            .expect("Failed casting rocm-smi info to ints.")
-    })
-    .collect::<Vec<i32>>();
+fn get_gpu_info() -> (u8, u8, u8) {
+    let usage = fs::read_to_string("/sys/class/drm/card1/device/gpu_busy_percent")
+        .expect("Failed to read GPU usage.")
+        .strip_suffix("\n")
+        .expect("Failed to remove newline (GPU usage).")
+        .parse::<u8>()
+        .expect("Failed to cast GPU usage to int.");
 
-    let (usage, vram) = (info[0], info[1]);
+    let vram_total = fs::read_to_string("/sys/class/drm/card1/device/mem_info_vram_total")
+        .expect("Failed to read GPU VRAM total.")
+        .strip_suffix("\n")
+        .expect("Failed to remove newline (GPU total VRAM).")
+        .parse::<u64>()
+        .expect("Failed to cast GPU VRAM total to int.");
+
+    let vram_used = fs::read_to_string("/sys/class/drm/card1/device/mem_info_vram_used")
+        .expect("Failed to read GPU VRAM usage.")
+        .strip_suffix("\n")
+        .expect("Failed to remove newline (GPU used VRAM).")
+        .parse::<u64>()
+        .expect("Failed to cast GPU VRAM usage to int.");
 
     (
-        usage as i32,
-        get_device_temp(".\"nvme-pci-0900\".\"Composite\".\"temp1_input\""),
-        vram as i32,
+        usage,
+        get_device_temp("nvme-pci-0900", "Composite", "temp1_input"),
+        (vram_used * 100 / vram_total) as u8,
     )
 }
 
@@ -152,6 +132,6 @@ fn main() {
         writeln!(handle, "{}", format_info(&device_type, usage, temp, mem)).unwrap();
 
         let _ = handle.flush();
-        sleep(Duration::from_millis(1000));
+        sleep(Duration::from_millis(500));
     }
 }

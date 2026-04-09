@@ -38,23 +38,24 @@
           src = craneLib.cleanCargoSource ./resources;
           strictDeps = true;
 
-          nativeBuildInputs = with pkgs; [ makeWrapper ];
+          # nativeBuildInputs = with pkgs; [
+          #   makeWrapper
+          # ];
+
           buildInputs = with pkgs; [
-            rocmPackages.rocm-smi
-            lm_sensors
+            lm_sensors.dev
           ];
 
-          postInstall =
-            let
-              binPath = pkgs.lib.makeBinPath [
-                pkgs.rocmPackages.rocm-smi
-                pkgs.lm_sensors
-              ];
-            in
-            ''
-              wrapProgram $out/bin/resources \
-                --prefix PATH : "${binPath}"
-            '';
+          # postInstall =
+          #   let
+          #     binPath = pkgs.lib.makeBinPath [
+          #       pkgs.lm_sensors
+          #     ];
+          #   in
+          #   ''
+          #     wrapProgram $out/bin/resources \
+          #       --prefix PATH : "${binPath}"
+          #   '';
         };
       in
       {
@@ -64,6 +65,10 @@
           inherit diagnostics;
 
           default = workspaces; # or combine them somehow
+        };
+
+        devShells.default = pkgs.mkShell {
+          inputsFrom = [ resources ];
         };
 
         apps = {
