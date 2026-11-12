@@ -50,7 +50,7 @@ fn format_as_icons(workspace: &Workspace) -> String {
         .map(|app: &str| {
             match app.to_lowercase().as_str() {
                 "spotify" => " ",
-                "alacritty" => " ",
+                "alacritty" | "kitty" => " ",
                 "brave-browser" => " ",
                 "firefox" => " ",
                 "libreoffice-calc" => "󰧷 ",
