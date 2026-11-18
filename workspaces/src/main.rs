@@ -1,11 +1,9 @@
-use swayipc::{Connection, Workspace};
+use swayipc::{Connection, Event, EventType, WindowChange, Workspace};
 
 use std::collections::HashMap;
 use std::env;
 use std::io::{self, Write};
 use std::process::exit;
-use std::thread::sleep;
-use std::time::Duration;
 
 fn build_workspace_repr(workspace_ids: &[u8], conn: &mut Connection) -> String {
     // num => "<x x>    "
@@ -111,11 +109,34 @@ fn main() {
 
     let workspace_ids = validate_workspace_args(&args[1..]);
 
-    loop {
-        writeln!(handle, "{}", build_json_repr(&workspace_ids, &mut conn))
-            .expect("Error sending JSON.");
-        let _ = handle.flush();
+    // subscribe() consumes its Connection, so queries need their own.
+    let events = Connection::new()
+        .expect("Failed to connect to Sway IPC")
+        .subscribe([EventType::Workspace, EventType::Window])
+        .expect("Failed to subscribe to Sway events");
 
-        sleep(Duration::from_millis(100));
+    let mut last = String::new();
+    let mut emit = |conn: &mut Connection| {
+        let line = build_json_repr(&workspace_ids, conn);
+        if line != last {
+            writeln!(handle, "{}", line).expect("Error sending JSON.");
+            let _ = handle.flush();
+            last = line;
+        }
+    };
+
+    // Initial render, then one redraw per relevant event.
+    emit(&mut conn);
+
+    for event in events {
+        match event {
+            // Title changes (browser tabs, terminals) are frequent and don't affect icons.
+            Ok(Event::Window(w)) if matches!(w.change, WindowChange::Title) => continue,
+            Ok(_) => emit(&mut conn),
+            Err(e) => {
+                eprintln!("Sway event stream error: {e}");
+                exit(1);
+            }
+        }
     }
 }
